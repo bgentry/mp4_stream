@@ -50,10 +50,10 @@ func (f *File) parse() (err os.Error) {
 		switch name {
 		case "ftyp":
 			f.ftyp = &FtypBox{ Box:box }
-			f.ftyp.ParseContents()
+			f.ftyp.parseContents()
 		case "moov":
 			f.moov = &MoovBox{ Box:box }
-			f.moov.ParseContents()
+			f.moov.parseContents()
 		case "mdat":
 			f.mdat = &box
 		}
@@ -103,7 +103,7 @@ type BoxInt interface {
 	Name() string
 	Size() int64
 	OffsetStart() int64
-	ParseContents() (os.Error)
+	parseContents() (os.Error)
 }
 
 type Box struct {
@@ -118,7 +118,7 @@ func (b *Box) Size() (int64) { return b.size }
 
 func (b *Box) OffsetStart() (int64) { return b.offsetStart }
 
-func (b *Box) ParseContents() (os.Error) {
+func (b *Box) parseContents() (os.Error) {
 	return nil
 }
 
@@ -128,7 +128,7 @@ type FtypBox struct {
 	compatible_brands []string
 }
 
-func (b *FtypBox) ParseContents() (os.Error) {
+func (b *FtypBox) parseContents() (os.Error) {
 	data := b.file.ReadBoxData(b)
 	b.major_brand, b.minor_version = string(data[0:4]), string(data[4:8])
 	if len(data) > 8 {
@@ -143,7 +143,7 @@ type MoovBox struct {
 	Box
 }
 
-func (b *MoovBox) ParseContents() (os.Error) {
+func (b *MoovBox) parseContents() (os.Error) {
 	return nil
 }
 
