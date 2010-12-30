@@ -27,7 +27,7 @@ func Open(path string) (f *File, err os.Error) {
 	return f, f.parse()
 }
 
-func (f *File) parse() (err os.Error) {
+func (f *File) parse() (os.Error) {
 	info, err := f.Stat()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -36,32 +36,48 @@ func (f *File) parse() (err os.Error) {
 	fmt.Printf("File size: %v \n", info.Size)
 	f.size = info.Size
 
-	// Loop through top-level Atoms
-	for offset := int64(0); offset < f.size; {
-		size, name := f.ReadBoxAt(offset)
-		fmt.Printf("Atom found:\nType: %v \nSize (bytes): %v \n", name, size)
-
-		box := Box {
-			name:					name,
-			size:					int64(size),
-			offsetStart:	offset,
-			file:					f,
-		}
-		switch name {
+	// Loop through top-level Boxes
+	boxes := readBoxes(f, int64(0), f.size)
+	for box := range boxes {
+		switch box.Name() {
 		case "ftyp":
 			f.ftyp = &FtypBox{ Box:box }
-			f.ftyp.parseContents()
+			f.ftyp.parse()
 		case "moov":
 			f.moov = &MoovBox{ Box:box }
-			f.moov.parseContents()
+			f.moov.parse()
 		case "mdat":
-			f.mdat = &box
+			f.mdat = box
+		default:
+			fmt.Printf("Unhandled Box: %v \n", box.Name())
 		}
-
-		offset += int64(size)
 	}
-
 	return nil
+}
+
+func readBoxes(f *File, start int64, n int64) (boxes chan *Box) {
+	boxes = make(chan *Box, 100)
+	go func() {
+		for offset := start; offset < start + n; {
+			size, name := f.ReadBoxAt(offset)
+			fmt.Printf("Box found:\nType: %v \nSize (bytes): %v \n", name, size)
+
+			box := &Box {
+				name:		name,
+				size:		int64(size),
+				start:	offset,
+				file:		f,
+			}
+			boxes <- box
+			offset += int64(size)
+		}
+		close(boxes)
+	} ()
+	return boxes
+}
+
+func readSubBoxes(f *File, start int64, n int64) (boxes chan *Box) {
+	return readBoxes(f, start + BOX_HEADER_SIZE, n - BOX_HEADER_SIZE)
 }
 
 type File struct {
@@ -73,11 +89,11 @@ type File struct {
 }
 
 func (f *File) ReadBoxAt(offset int64) (boxSize uint32, boxType string) {
-	// Get Atom size
+	// Get Box size
 	buf := f.ReadBytesAt(BOX_HEADER_SIZE, offset)
 	boxSize = binary.BigEndian.Uint32(buf[0:4])
 	offset += BOX_HEADER_SIZE
-	// Get Atom name
+	// Get Box name
 	boxType = string(buf[4:8])
 	return boxSize, boxType
 }
@@ -96,42 +112,20 @@ func (f *File) ReadBoxData(b BoxInt) ([]byte) {
 	if b.Size() <= BOX_HEADER_SIZE {
 		return nil
 	}
-	return f.ReadBytesAt(b.Size() - BOX_HEADER_SIZE, b.OffsetStart() + BOX_HEADER_SIZE)
-}
-
-func readSubBoxes(b BoxInt) (boxes chan *Box) {
-	boxes = make(chan *Box, 100)
-	go func() {
-		// Loop through boxes within this container box
-		for offset := (b.OffsetStart()) + BOX_HEADER_SIZE; (offset < b.OffsetStart() + b.Size()); {
-			size, name := b.File().ReadBoxAt(offset)
-			fmt.Printf("Atom found:\nType: %v \nSize (bytes): %v \n", name, size)
-
-			subBox := &Box {
-				name:					name,
-				size:					int64(size),
-				offsetStart:	offset,
-				file:					b.File(),
-			}
-			boxes <- subBox
-			offset += int64(size)
-		}
-		close(boxes)
-	} ()
-	return boxes
+	return f.ReadBytesAt(b.Size() - BOX_HEADER_SIZE, b.Start() + BOX_HEADER_SIZE)
 }
 
 type BoxInt interface {
 	Name() string
 	File() *File
 	Size() int64
-	OffsetStart() int64
-	parseContents() (os.Error)
+	Start() int64
+	parse() (os.Error)
 }
 
 type Box struct {
 	name string
-	size, offsetStart int64
+	size, start int64
 	file *File
 }
 
@@ -141,20 +135,20 @@ func (b *Box) Size() (int64) { return b.size }
 
 func (b *Box) File() (*File) { return b.file }
 
-func (b *Box) OffsetStart() (int64) { return b.offsetStart }
+func (b *Box) Start() (int64) { return b.start }
 
-func (b *Box) parseContents() (os.Error) {
-	fmt.Println("Default parser called; skip parsing.\n")
+func (b *Box) parse() (os.Error) {
+	fmt.Println("Default parser called; skip parsing.")
 	return nil
 }
 
 type FtypBox struct {
-	Box
+	*Box
 	major_brand, minor_version string
 	compatible_brands []string
 }
 
-func (b *FtypBox) parseContents() (os.Error) {
+func (b *FtypBox) parse() (os.Error) {
 	data := b.file.ReadBoxData(b)
 	b.major_brand, b.minor_version = string(data[0:4]), string(data[4:8])
 	if len(data) > 8 {
@@ -166,28 +160,22 @@ func (b *FtypBox) parseContents() (os.Error) {
 }
 
 type MoovBox struct {
-	Box
+	*Box
 	mvhd *MvhdBox
 }
 
-func (b *MoovBox) parseContents() (os.Error) {
-	boxes := readSubBoxes(b)
+func (b *MoovBox) parse() (os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
 	for subBox := range boxes {
 		switch subBox.Name() {
 		case "mvhd":
 			b.mvhd = &MvhdBox{ Box:subBox }
-			b.mvhd.parseContents()
+			b.mvhd.parse()
 		default:
 			fmt.Printf("Unhandled Box: %v \n", subBox.Name())
 		}
 	}
 	return nil
-}
-
-type FtypBox struct {
-	Box
-	major_brand, minor_version string
-	compatible_brands []string
 }
 
 type MvhdBox struct {
