@@ -162,6 +162,7 @@ func (b *FtypBox) parse() (os.Error) {
 type MoovBox struct {
 	*Box
 	mvhd *MvhdBox
+	iods *IodsBox
 }
 
 func (b *MoovBox) parse() (os.Error) {
@@ -171,6 +172,9 @@ func (b *MoovBox) parse() (os.Error) {
 		case "mvhd":
 			b.mvhd = &MvhdBox{ Box:subBox }
 			b.mvhd.parse()
+		case "iods":
+			b.iods = &IodsBox{ Box:subBox }
+			b.iods.parse()
 		default:
 			fmt.Printf("Unhandled Box: %v \n", subBox.Name())
 		}
@@ -196,6 +200,16 @@ func (b *MvhdBox) parse() (os.Error) {
 	b.rate = data[20:24]
 	b.volume = data[24:26]
 	b.other_data = data[26:]
+	return nil
+}
+
+type IodsBox struct {
+	*Box
+	data []byte
+}
+
+func (b *IodsBox) parse() (os.Error) {
+	b.data = b.ReadBoxData()
 	return nil
 }
 
