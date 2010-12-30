@@ -180,7 +180,23 @@ func (b *MoovBox) parse() (os.Error) {
 
 type MvhdBox struct {
 	*Box
-	version, creation_time, modification_time, timescale, duration, next_track_id int32
+	version, creation_time, modification_time, timescale, duration, next_track_id uint32
+	rate []byte
+	volume []byte
+	other_data []byte
+}
+
+func (b *MvhdBox) parse() (os.Error) {
+	data := b.ReadBoxData()
+	b.version = binary.BigEndian.Uint32(data[0:4])
+	b.creation_time = binary.BigEndian.Uint32(data[4:8])
+	b.modification_time = binary.BigEndian.Uint32(data[8:12])
+	b.timescale = binary.BigEndian.Uint32(data[12:16])
+	b.duration = binary.BigEndian.Uint32(data[16:20])
+	b.rate = data[20:24]
+	b.volume = data[24:26]
+	b.other_data = data[26:]
+	return nil
 }
 
 type ContainerBox interface {
