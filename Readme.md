@@ -13,5 +13,5 @@ See <http://golang.org/doc/install.html>.
 
 ## Try It Out
 
-    $ mp4_stream
+    $ mp4_stream -i ~/Movies/input_file.mp4
 
