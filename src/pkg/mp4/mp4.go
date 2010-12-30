@@ -108,13 +108,6 @@ func (f *File) ReadBytesAt(n int64, offset int64) (word []byte) {
 	return buf
 }
 
-func (f *File) ReadBoxData(b BoxInt) ([]byte) {
-	if b.Size() <= BOX_HEADER_SIZE {
-		return nil
-	}
-	return f.ReadBytesAt(b.Size() - BOX_HEADER_SIZE, b.Start() + BOX_HEADER_SIZE)
-}
-
 type BoxInt interface {
 	Name() string
 	File() *File
@@ -142,6 +135,13 @@ func (b *Box) parse() (os.Error) {
 	return nil
 }
 
+func (b *Box) ReadBoxData() ([]byte) {
+	if b.Size() <= BOX_HEADER_SIZE {
+		return nil
+	}
+	return b.File().ReadBytesAt(b.Size() - BOX_HEADER_SIZE, b.Start() + BOX_HEADER_SIZE)
+}
+
 type FtypBox struct {
 	*Box
 	major_brand, minor_version string
@@ -149,7 +149,7 @@ type FtypBox struct {
 }
 
 func (b *FtypBox) parse() (os.Error) {
-	data := b.file.ReadBoxData(b)
+	data := b.ReadBoxData()
 	b.major_brand, b.minor_version = string(data[0:4]), string(data[4:8])
 	if len(data) > 8 {
 		for i := 8; i < len(data); i += 4 {
