@@ -230,6 +230,7 @@ func (b *IodsBox) parse() (os.Error) {
 type TrakBox struct {
 	*Box
 	tkhd *TkhdBox
+	mdia *MdiaBox
 }
 
 func (b *TrakBox) parse() (os.Error) {
@@ -239,6 +240,9 @@ func (b *TrakBox) parse() (os.Error) {
 		case "tkhd":
 			b.tkhd = &TkhdBox{ Box:subBox }
 			b.tkhd.parse()
+		case "mdia":
+			b.mdia = &MdiaBox{ Box:subBox }
+			b.mdia.parse()
 		default:
 			fmt.Printf("Unhandled Trak Sub-Box: %v \n", subBox.Name())
 		}
@@ -282,6 +286,21 @@ func (b *TkhdBox) parse() (err os.Error) {
 	b.height, err = MakeFixed32(data[80:84])
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+type MdiaBox struct {
+	*Box
+}
+
+func (b *MdiaBox) parse() (os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		default:
+			fmt.Printf("Unhandled Mdia Sub-Box: %v \n", subBox.Name())
+		}
 	}
 	return nil
 }
