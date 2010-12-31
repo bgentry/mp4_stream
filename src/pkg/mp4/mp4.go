@@ -362,6 +362,7 @@ type MinfBox struct {
 	vmhd *VmhdBox
 	smhd *SmhdBox
 	stbl *StblBox
+	dinf *DinfBox
 }
 
 func (b *MinfBox) parse() (err os.Error) {
@@ -377,6 +378,9 @@ func (b *MinfBox) parse() (err os.Error) {
 		case "stbl":
 			b.stbl = &StblBox{ Box:subBox }
 			err = b.stbl.parse()
+		case "dinf":
+			b.dinf = &DinfBox{ Box:subBox }
+			err = b.dinf.parse()
 		default:
 			fmt.Printf("Unhandled Minf Sub-Box: %v \n", subBox.Name())
 		}
@@ -591,6 +595,46 @@ func (b *StcoBox) parse() (err os.Error) {
 		chunk := binary.BigEndian.Uint32(data[(8+4*i):(12+4*i)])
 		b.chunk_offset = append(b.chunk_offset, chunk)
 	}
+	return nil
+}
+
+type DinfBox struct {
+	*Box
+	dref *DrefBox
+}
+
+func (b *DinfBox) parse() (err os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "dref":
+			b.dref = &DrefBox{ Box:subBox }
+			err = b.dref.parse()
+		default:
+			fmt.Printf("Unhandled Dinf Sub-Box: %v \n", subBox.Name())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type DrefBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	other_data []byte
+}
+
+func (b *DrefBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	b.other_data = data[8:]
+	fmt.Println("dref box parsing not yet finished")
 	return nil
 }
 
