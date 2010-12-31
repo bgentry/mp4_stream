@@ -164,6 +164,7 @@ type MoovBox struct {
 	mvhd *MvhdBox
 	iods *IodsBox
 	traks []*TrakBox
+	udta *UdtaBox
 }
 
 func (b *MoovBox) parse() (os.Error) {
@@ -180,6 +181,9 @@ func (b *MoovBox) parse() (os.Error) {
 			trak := &TrakBox{ Box:subBox }
 			trak.parse()
 			b.traks = append(b.traks, trak)
+		case "udta":
+			b.udta = &UdtaBox{ Box:subBox }
+			b.udta.parse()
 		default:
 			fmt.Printf("Unhandled Moov Sub-Box: %v \n", subBox.Name())
 		}
@@ -635,6 +639,55 @@ func (b *DrefBox) parse() (err os.Error) {
 	b.entry_count = binary.BigEndian.Uint32(data[4:8])
 	b.other_data = data[8:]
 	fmt.Println("dref box parsing not yet finished")
+	return nil
+}
+
+type UdtaBox struct {
+	*Box
+	meta *MetaBox
+}
+
+func (b *UdtaBox) parse() (err os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "meta":
+			b.meta = &MetaBox{ Box:subBox }
+			err = b.meta.parse()
+		default:
+			fmt.Printf("Unhandled Udta Sub-Box: %v \n", subBox.Name())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type MetaBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	hdlr *HdlrBox
+}
+
+func (b *MetaBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	boxes := readSubBoxes(b.File(), b.Start()+4, b.Size()-4)
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "hdlr":
+			b.hdlr = &HdlrBox{ Box:subBox }
+			err = b.hdlr.parse()
+		default:
+			fmt.Printf("Unhandled Meta Sub-Box: %v \n", subBox.Name())
+		}
+		if err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
