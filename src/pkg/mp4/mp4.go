@@ -424,6 +424,8 @@ func (b *SmhdBox) parse() (err os.Error) {
 type StblBox struct {
 	*Box
 	stsd *StsdBox
+	stts *SttsBox
+	stss *StssBox
 }
 
 func (b *StblBox) parse() (err os.Error) {
@@ -433,6 +435,12 @@ func (b *StblBox) parse() (err os.Error) {
 		case "stsd":
 			b.stsd = &StsdBox{ Box:subBox }
 			err = b.stsd.parse()
+		case "stts":
+			b.stts = &SttsBox{ Box:subBox }
+			err = b.stts.parse()
+		case "stss":
+			b.stss = &StssBox{ Box:subBox }
+			err = b.stss.parse()
 		default:
 			fmt.Printf("Unhandled Stbl Sub-Box: %v \n", subBox.Name())
 		}
@@ -458,6 +466,49 @@ func (b *StsdBox) parse() (err os.Error) {
 	b.entry_count = binary.BigEndian.Uint32(data[4:8])
 	b.other_data = data[8:]
 	fmt.Println("stsd box parsing not yet finished")
+	return nil
+}
+
+type SttsBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	sample_counts []uint32
+	sample_deltas []uint32
+}
+
+func (b *SttsBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	for i := 0; i < int(b.entry_count); i++ {
+		s_count := binary.BigEndian.Uint32(data[(8+8*i):(12+8*i)])
+		s_delta := binary.BigEndian.Uint32(data[(12+8*i):(16+8*i)])
+		b.sample_counts = append(b.sample_counts, s_count)
+		b.sample_deltas = append(b.sample_deltas, s_delta)
+	}
+	return nil
+}
+
+type StssBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	sample_numbers []uint32
+}
+
+func (b *StssBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	for i := 0; i < int(b.entry_count); i++ {
+		sample := binary.BigEndian.Uint32(data[(8+4*i):(12+4*i)])
+		b.sample_numbers = append(b.sample_numbers, sample)
+	}
 	return nil
 }
 
