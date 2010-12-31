@@ -131,7 +131,7 @@ func (b *Box) File() (*File) { return b.file }
 func (b *Box) Start() (int64) { return b.start }
 
 func (b *Box) parse() (os.Error) {
-	fmt.Println("Default parser called; skip parsing.")
+	fmt.Printf("Default parser called; skip parsing. (%v)\n", b.name)
 	return nil
 }
 
@@ -292,16 +292,64 @@ func (b *TkhdBox) parse() (err os.Error) {
 
 type MdiaBox struct {
 	*Box
+	mdhd *MdhdBox
+	hdlr *HdlrBox
 }
 
 func (b *MdiaBox) parse() (os.Error) {
 	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
 	for subBox := range boxes {
 		switch subBox.Name() {
+		case "mdhd":
+			b.mdhd = &MdhdBox{ Box:subBox }
+			b.mdhd.parse()
+		case "hdlr":
+			b.hdlr = &HdlrBox{ Box:subBox }
+			b.hdlr.parse()
 		default:
 			fmt.Printf("Unhandled Mdia Sub-Box: %v \n", subBox.Name())
 		}
 	}
+	return nil
+}
+
+type MdhdBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	creation_time, modification_time, timescale, duration uint32
+	language uint16 // Combine 1-bit padding w/ 15-bit language data
+}
+
+func (b *MdhdBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.creation_time = binary.BigEndian.Uint32(data[4:8])
+	b.modification_time = binary.BigEndian.Uint32(data[8:12])
+	b.timescale = binary.BigEndian.Uint32(data[12:16])
+	b.duration = binary.BigEndian.Uint32(data[16:20])
+	// language includes 1 padding bit
+	b.language = binary.BigEndian.Uint16(data[20:22])
+	return nil
+}
+
+type HdlrBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	pre_defined uint32
+	handler_type, track_name string
+}
+
+func (b *HdlrBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.pre_defined = binary.BigEndian.Uint32(data[4:8])
+	b.handler_type = string(data[8:12])
+	// Skip 12 bytes for reserved space (3 uint32)
+	b.track_name = string(data[24:])
 	return nil
 }
 
