@@ -426,6 +426,7 @@ type StblBox struct {
 	stsd *StsdBox
 	stts *SttsBox
 	stss *StssBox
+	stsc *StscBox
 }
 
 func (b *StblBox) parse() (err os.Error) {
@@ -441,6 +442,9 @@ func (b *StblBox) parse() (err os.Error) {
 		case "stss":
 			b.stss = &StssBox{ Box:subBox }
 			err = b.stss.parse()
+		case "stsc":
+			b.stsc = &StscBox{ Box:subBox }
+			err = b.stsc.parse()
 		default:
 			fmt.Printf("Unhandled Stbl Sub-Box: %v \n", subBox.Name())
 		}
@@ -474,8 +478,8 @@ type SttsBox struct {
 	version uint8
 	flags [3]byte
 	entry_count uint32
-	sample_counts []uint32
-	sample_deltas []uint32
+	sample_count []uint32
+	sample_delta []uint32
 }
 
 func (b *SttsBox) parse() (err os.Error) {
@@ -486,8 +490,8 @@ func (b *SttsBox) parse() (err os.Error) {
 	for i := 0; i < int(b.entry_count); i++ {
 		s_count := binary.BigEndian.Uint32(data[(8+8*i):(12+8*i)])
 		s_delta := binary.BigEndian.Uint32(data[(12+8*i):(16+8*i)])
-		b.sample_counts = append(b.sample_counts, s_count)
-		b.sample_deltas = append(b.sample_deltas, s_delta)
+		b.sample_count = append(b.sample_count, s_count)
+		b.sample_delta = append(b.sample_delta, s_delta)
 	}
 	return nil
 }
@@ -497,7 +501,7 @@ type StssBox struct {
 	version uint8
 	flags [3]byte
 	entry_count uint32
-	sample_numbers []uint32
+	sample_number []uint32
 }
 
 func (b *StssBox) parse() (err os.Error) {
@@ -507,7 +511,33 @@ func (b *StssBox) parse() (err os.Error) {
 	b.entry_count = binary.BigEndian.Uint32(data[4:8])
 	for i := 0; i < int(b.entry_count); i++ {
 		sample := binary.BigEndian.Uint32(data[(8+4*i):(12+4*i)])
-		b.sample_numbers = append(b.sample_numbers, sample)
+		b.sample_number = append(b.sample_number, sample)
+	}
+	return nil
+}
+
+type StscBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	first_chunk []uint32
+	samples_per_chunk []uint32
+	sample_description_index []uint32
+}
+
+func (b *StscBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	for i := 0; i < int(b.entry_count); i++ {
+		fc := binary.BigEndian.Uint32(data[(8+12*i):(12+12*i)])
+		spc := binary.BigEndian.Uint32(data[(12+12*i):(16+12*i)])
+		sdi := binary.BigEndian.Uint32(data[(16+12*i):(20+12*i)])
+		b.first_chunk = append(b.first_chunk, fc)
+		b.samples_per_chunk = append(b.samples_per_chunk, spc)
+		b.sample_description_index = append(b.sample_description_index, sdi)
 	}
 	return nil
 }
