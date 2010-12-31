@@ -163,6 +163,7 @@ type MoovBox struct {
 	*Box
 	mvhd *MvhdBox
 	iods *IodsBox
+	traks []*TrakBox
 }
 
 func (b *MoovBox) parse() (os.Error) {
@@ -175,8 +176,12 @@ func (b *MoovBox) parse() (os.Error) {
 		case "iods":
 			b.iods = &IodsBox{ Box:subBox }
 			b.iods.parse()
+		case "trak":
+			trak := &TrakBox{ Box:subBox }
+			trak.parse()
+			b.traks = append(b.traks, trak)
 		default:
-			fmt.Printf("Unhandled Box: %v \n", subBox.Name())
+			fmt.Printf("Unhandled Moov Sub-Box: %v \n", subBox.Name())
 		}
 	}
 	return nil
@@ -184,21 +189,30 @@ func (b *MoovBox) parse() (os.Error) {
 
 type MvhdBox struct {
 	*Box
-	version, creation_time, modification_time, timescale, duration, next_track_id uint32
-	rate []byte
-	volume []byte
+	version uint8
+	flags [3]byte
+	creation_time, modification_time, timescale, duration, next_track_id uint32
+	rate Fixed32
+	volume Fixed16
 	other_data []byte
 }
 
-func (b *MvhdBox) parse() (os.Error) {
+func (b *MvhdBox) parse() (err os.Error) {
 	data := b.ReadBoxData()
-	b.version = binary.BigEndian.Uint32(data[0:4])
+	b.version = data[0]
+	b.flags = [3]byte{data[1], data[2], data[3]}
 	b.creation_time = binary.BigEndian.Uint32(data[4:8])
 	b.modification_time = binary.BigEndian.Uint32(data[8:12])
 	b.timescale = binary.BigEndian.Uint32(data[12:16])
 	b.duration = binary.BigEndian.Uint32(data[16:20])
-	b.rate = data[20:24]
-	b.volume = data[24:26]
+	b.rate, err = MakeFixed32(data[20:24])
+	if err != nil {
+		return err
+	}
+	b.volume, err = MakeFixed16(data[24:26])
+	if err != nil {
+		return err
+	}
 	b.other_data = data[26:]
 	return nil
 }
@@ -211,6 +225,93 @@ type IodsBox struct {
 func (b *IodsBox) parse() (os.Error) {
 	b.data = b.ReadBoxData()
 	return nil
+}
+
+type TrakBox struct {
+	*Box
+	tkhd *TkhdBox
+}
+
+func (b *TrakBox) parse() (os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "tkhd":
+			b.tkhd = &TkhdBox{ Box:subBox }
+			b.tkhd.parse()
+		default:
+			fmt.Printf("Unhandled Trak Sub-Box: %v \n", subBox.Name())
+		}
+	}
+	return nil
+}
+
+type TkhdBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	creation_time, modification_time, track_id, duration uint32
+	layer, alternate_group uint16 // This should really be int16 but not sure how to parse
+	volume Fixed16
+	matrix []byte
+	width, height Fixed32
+}
+
+func (b *TkhdBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.creation_time = binary.BigEndian.Uint32(data[4:8])
+	b.modification_time = binary.BigEndian.Uint32(data[8:12])
+	b.track_id = binary.BigEndian.Uint32(data[12:16])
+	// Skip 4 bytes for reserved space (uint32)
+	b.duration = binary.BigEndian.Uint32(data[20:24])
+	// Skip 8 bytes for reserved space (2 uint32)
+	b.layer = binary.BigEndian.Uint16(data[32:34])
+	b.alternate_group = binary.BigEndian.Uint16(data[34:36])
+	b.volume, err = MakeFixed16(data[36:38])
+	if err != nil {
+		return err
+	}
+	// Skip 2 bytes for reserved space (uint16)
+	b.matrix = data[40:76]
+	b.width, err = MakeFixed32(data[76:80])
+	if err != nil {
+		return err
+	}
+	b.height, err = MakeFixed32(data[80:84])
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// An 8.8 Fixed Point Decimal notation
+type Fixed16 uint16
+
+func (f Fixed16) String() string {
+	return fmt.Sprintf("%v", uint16(f) >> 8)
+}
+
+func MakeFixed16(bytes []byte) (Fixed16, os.Error) {
+	if len(bytes) != 2 {
+		return Fixed16(0), os.NewError("Invalid number of bytes for Fixed16. Need 2, got " + string(len(bytes)))
+	}
+	return Fixed16(binary.BigEndian.Uint16(bytes)), nil
+}
+
+// A 16.16 Fixed Point Decimal notation
+type Fixed32 uint32
+
+func (f Fixed32) String() string {
+	return fmt.Sprintf("%v", uint32(f) >> 16)
+}
+
+func MakeFixed32(bytes []byte) (Fixed32, os.Error) {
+	if len(bytes) != 4 {
+		return Fixed32(0), os.NewError("Invalid number of bytes for Fixed32. Need 4, got " + string(len(bytes)))
+	}
+	return Fixed32(binary.BigEndian.Uint32(bytes)), nil
 }
 
 type ContainerBox interface {
