@@ -113,7 +113,7 @@ type BoxInt interface {
 	File() *File
 	Size() int64
 	Start() int64
-	parse() (os.Error)
+	parse() os.Error
 }
 
 type Box struct {
@@ -294,6 +294,7 @@ type MdiaBox struct {
 	*Box
 	mdhd *MdhdBox
 	hdlr *HdlrBox
+	minf *MinfBox
 }
 
 func (b *MdiaBox) parse() (os.Error) {
@@ -306,6 +307,9 @@ func (b *MdiaBox) parse() (os.Error) {
 		case "hdlr":
 			b.hdlr = &HdlrBox{ Box:subBox }
 			b.hdlr.parse()
+		case "minf":
+			b.minf = &MinfBox{ Box:subBox }
+			b.minf.parse()
 		default:
 			fmt.Printf("Unhandled Mdia Sub-Box: %v \n", subBox.Name())
 		}
@@ -350,6 +354,66 @@ func (b *HdlrBox) parse() (err os.Error) {
 	b.handler_type = string(data[8:12])
 	// Skip 12 bytes for reserved space (3 uint32)
 	b.track_name = string(data[24:])
+	return nil
+}
+
+type MinfBox struct {
+	*Box
+	vmhd *VmhdBox
+	smhd *SmhdBox
+}
+
+func (b *MinfBox) parse() (err os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "vmhd":
+			b.vmhd = &VmhdBox{ Box:subBox }
+			err = b.vmhd.parse()
+		case "smhd":
+			b.smhd = &SmhdBox{ Box:subBox }
+			err = b.smhd.parse()
+		default:
+			fmt.Printf("Unhandled Minf Sub-Box: %v \n", subBox.Name())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type VmhdBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	graphicsmode uint16
+	opcolor [3]uint16
+}
+
+func (b *VmhdBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.graphicsmode = binary.BigEndian.Uint16(data[4:6])
+	for i := 0; i < 3; i++ {
+		b.opcolor[i] = binary.BigEndian.Uint16(data[(6+2*i):(8+2*i)])
+	}
+	return nil
+}
+
+type SmhdBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	balance uint16 // This should really be int16 but not sure how to parse
+}
+
+func (b *SmhdBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.balance = binary.BigEndian.Uint16(data[4:6])
 	return nil
 }
 
