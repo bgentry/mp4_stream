@@ -235,6 +235,7 @@ type TrakBox struct {
 	*Box
 	tkhd *TkhdBox
 	mdia *MdiaBox
+	edts *EdtsBox
 }
 
 func (b *TrakBox) parse() (os.Error) {
@@ -247,6 +248,9 @@ func (b *TrakBox) parse() (os.Error) {
 		case "mdia":
 			b.mdia = &MdiaBox{ Box:subBox }
 			b.mdia.parse()
+		case "edts":
+			b.edts = &EdtsBox{ Box:subBox }
+			b.edts.parse()
 		default:
 			fmt.Printf("Unhandled Trak Sub-Box: %v \n", subBox.Name())
 		}
@@ -291,6 +295,56 @@ func (b *TkhdBox) parse() (err os.Error) {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+type EdtsBox struct {
+	*Box
+	elst *ElstBox
+}
+
+func (b *EdtsBox) parse() (err os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "elst":
+			b.elst = &ElstBox{ Box:subBox }
+			err = b.elst.parse()
+		default:
+			fmt.Printf("Unhandled Edts Sub-Box: %v \n", subBox.Name())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type ElstBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	segment_duration, media_time []uint32
+	media_rate_integer, media_rate_fraction []uint16 // This should really be int16 but not sure how to parse
+}
+
+func (b *ElstBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	for i := 0; i < int(b.entry_count); i++ {
+		sd := binary.BigEndian.Uint32(data[(8+12*i):(12+12*i)])
+		mt := binary.BigEndian.Uint32(data[(12+12*i):(16+12*i)])
+		mri := binary.BigEndian.Uint16(data[(16+12*i):(18+12*i)])
+		mrf := binary.BigEndian.Uint16(data[(18+12*i):(20+12*i)])
+		b.segment_duration = append(b.segment_duration, sd)
+		b.media_time = append(b.media_time, mt)
+		b.media_rate_integer = append(b.media_rate_integer, mri)
+		b.media_rate_fraction = append(b.media_rate_fraction, mrf)
+	}
+	fmt.Printf("elst box: %+v \n", b)
 	return nil
 }
 
