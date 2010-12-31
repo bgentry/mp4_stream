@@ -427,6 +427,8 @@ type StblBox struct {
 	stts *SttsBox
 	stss *StssBox
 	stsc *StscBox
+	stsz *StszBox
+	stco *StcoBox
 }
 
 func (b *StblBox) parse() (err os.Error) {
@@ -445,6 +447,12 @@ func (b *StblBox) parse() (err os.Error) {
 		case "stsc":
 			b.stsc = &StscBox{ Box:subBox }
 			err = b.stsc.parse()
+		case "stsz":
+			b.stsz = &StszBox{ Box:subBox }
+			err = b.stsz.parse()
+		case "stco":
+			b.stco = &StcoBox{ Box:subBox }
+			err = b.stco.parse()
 		default:
 			fmt.Printf("Unhandled Stbl Sub-Box: %v \n", subBox.Name())
 		}
@@ -538,6 +546,50 @@ func (b *StscBox) parse() (err os.Error) {
 		b.first_chunk = append(b.first_chunk, fc)
 		b.samples_per_chunk = append(b.samples_per_chunk, spc)
 		b.sample_description_index = append(b.sample_description_index, sdi)
+	}
+	return nil
+}
+
+type StszBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	sample_size uint32
+	sample_count uint32
+	entry_size []uint32
+}
+
+func (b *StszBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.sample_size = binary.BigEndian.Uint32(data[4:8])
+	b.sample_count = binary.BigEndian.Uint32(data[8:12])
+	if b.sample_size == uint32(0) {
+		for i := 0; i < int(b.sample_count); i++ {
+			entry := binary.BigEndian.Uint32(data[(12+4*i):(16+4*i)])
+			b.entry_size = append(b.entry_size, entry)
+		}
+	}
+	return nil
+}
+
+type StcoBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	chunk_offset []uint32
+}
+
+func (b *StcoBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	for i := 0; i < int(b.entry_count); i++ {
+		chunk := binary.BigEndian.Uint32(data[(8+4*i):(12+4*i)])
+		b.chunk_offset = append(b.chunk_offset, chunk)
 	}
 	return nil
 }
