@@ -361,6 +361,7 @@ type MinfBox struct {
 	*Box
 	vmhd *VmhdBox
 	smhd *SmhdBox
+	stbl *StblBox
 }
 
 func (b *MinfBox) parse() (err os.Error) {
@@ -373,6 +374,9 @@ func (b *MinfBox) parse() (err os.Error) {
 		case "smhd":
 			b.smhd = &SmhdBox{ Box:subBox }
 			err = b.smhd.parse()
+		case "stbl":
+			b.stbl = &StblBox{ Box:subBox }
+			err = b.stbl.parse()
 		default:
 			fmt.Printf("Unhandled Minf Sub-Box: %v \n", subBox.Name())
 		}
@@ -414,6 +418,46 @@ func (b *SmhdBox) parse() (err os.Error) {
 	b.version = data[0]
 	b.flags = [3]byte{ data[1], data[2], data[3] }
 	b.balance = binary.BigEndian.Uint16(data[4:6])
+	return nil
+}
+
+type StblBox struct {
+	*Box
+	stsd *StsdBox
+}
+
+func (b *StblBox) parse() (err os.Error) {
+	boxes := readSubBoxes(b.File(), b.Start(), b.Size())
+	for subBox := range boxes {
+		switch subBox.Name() {
+		case "stsd":
+			b.stsd = &StsdBox{ Box:subBox }
+			err = b.stsd.parse()
+		default:
+			fmt.Printf("Unhandled Stbl Sub-Box: %v \n", subBox.Name())
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type StsdBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	other_data []byte
+}
+
+func (b *StsdBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	b.other_data = data[8:]
+	fmt.Println("stsd box parsing not yet finished")
 	return nil
 }
 
