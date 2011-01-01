@@ -420,6 +420,7 @@ type MinfBox struct {
 	smhd *SmhdBox
 	stbl *StblBox
 	dinf *DinfBox
+	hdlr *HdlrBox
 }
 
 func (b *MinfBox) parse() (err os.Error) {
@@ -438,6 +439,9 @@ func (b *MinfBox) parse() (err os.Error) {
 		case "dinf":
 			b.dinf = &DinfBox{ Box:subBox }
 			err = b.dinf.parse()
+		case "hdlr":
+			b.hdlr = &HdlrBox{ Box:subBox }
+			err = b.hdlr.parse()
 		default:
 			fmt.Printf("Unhandled Minf Sub-Box: %v \n", subBox.Name())
 		}
