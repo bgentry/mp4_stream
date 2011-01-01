@@ -344,7 +344,6 @@ func (b *ElstBox) parse() (err os.Error) {
 		b.media_rate_integer = append(b.media_rate_integer, mri)
 		b.media_rate_fraction = append(b.media_rate_fraction, mrf)
 	}
-	fmt.Printf("elst box: %+v \n", b)
 	return nil
 }
 
