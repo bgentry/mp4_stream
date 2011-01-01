@@ -494,6 +494,7 @@ type StblBox struct {
 	stsc *StscBox
 	stsz *StszBox
 	stco *StcoBox
+	ctts *CttsBox
 }
 
 func (b *StblBox) parse() (err os.Error) {
@@ -518,6 +519,9 @@ func (b *StblBox) parse() (err os.Error) {
 		case "stco":
 			b.stco = &StcoBox{ Box:subBox }
 			err = b.stco.parse()
+		case "ctts":
+			b.ctts = &CttsBox{ Box:subBox }
+			err = b.ctts.parse()
 		default:
 			fmt.Printf("Unhandled Stbl Sub-Box: %v \n", subBox.Name())
 		}
@@ -655,6 +659,29 @@ func (b *StcoBox) parse() (err os.Error) {
 	for i := 0; i < int(b.entry_count); i++ {
 		chunk := binary.BigEndian.Uint32(data[(8+4*i):(12+4*i)])
 		b.chunk_offset = append(b.chunk_offset, chunk)
+	}
+	return nil
+}
+
+type CttsBox struct {
+	*Box
+	version uint8
+	flags [3]byte
+	entry_count uint32
+	sample_count []uint32
+	sample_offset []uint32
+}
+
+func (b *CttsBox) parse() (err os.Error) {
+	data := b.ReadBoxData()
+	b.version = data[0]
+	b.flags = [3]byte{ data[1], data[2], data[3] }
+	b.entry_count = binary.BigEndian.Uint32(data[4:8])
+	for i := 0; i < int(b.entry_count); i++ {
+		s_count := binary.BigEndian.Uint32(data[(8+8*i):(12+8*i)])
+		s_offset := binary.BigEndian.Uint32(data[(12+8*i):(16+8*i)])
+		b.sample_count = append(b.sample_count, s_count)
+		b.sample_offset = append(b.sample_offset, s_offset)
 	}
 	return nil
 }
