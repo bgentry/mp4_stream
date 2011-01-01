@@ -52,6 +52,11 @@ func (f *File) parse() (os.Error) {
 			fmt.Printf("Unhandled Box: %v \n", box.Name())
 		}
 	}
+
+	// Make sure we have all 3 required boxes
+	if f.ftyp == nil || f.moov == nil || f.mdat == nil {
+		return os.NewError("Missing a required box (ftyp, moov, or mdat)")
+	}
 	return nil
 }
 
