@@ -57,6 +57,91 @@ func (f *File) parse() (os.Error) {
 	if f.ftyp == nil || f.moov == nil || f.mdat == nil {
 		return os.NewError("Missing a required box (ftyp, moov, or mdat)")
 	}
+
+	// Build chunk & sample tables
+	fmt.Println("Building trak tables...")
+	if err = f.buildTrakTables(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return err
+	}
+	fmt.Println("Chunk and Sample tables built.")
+
+	return nil
+}
+
+func (f *File) buildTrakTables() (os.Error) {
+	for _, trak := range f.moov.traks {
+		trak.chunks = make([]Chunk, trak.mdia.minf.stbl.stco.entry_count)
+		for i, offset := range trak.mdia.minf.stbl.stco.chunk_offset {
+			trak.chunks[i].offset = offset
+		}
+
+		sample_num := uint32(1)
+		next_chunk_id := 1
+		for i := 0; i < int(trak.mdia.minf.stbl.stsc.entry_count); i++ {
+			if i + 1 < int(trak.mdia.minf.stbl.stsc.entry_count) {
+				next_chunk_id = int(trak.mdia.minf.stbl.stsc.first_chunk[i+1])
+			} else
+			{
+				next_chunk_id = len(trak.chunks)
+			}
+			first_chunk_id := trak.mdia.minf.stbl.stsc.first_chunk[i]
+			n_samples := trak.mdia.minf.stbl.stsc.samples_per_chunk[i]
+			sdi := trak.mdia.minf.stbl.stsc.sample_description_index[i]
+			for j := int(first_chunk_id-1); j < next_chunk_id; j++ {
+				trak.chunks[j].sample_count = n_samples
+				trak.chunks[j].sample_description_index = sdi
+				trak.chunks[j].start_sample = sample_num
+				sample_num += n_samples
+			}
+		}
+
+		sample_count := int(trak.mdia.minf.stbl.stsz.sample_count)
+		trak.samples = make([]Sample, sample_count)
+		sample_size := trak.mdia.minf.stbl.stsz.sample_size
+		for i := 0; i < sample_count; i++ {
+			if sample_size == uint32(0) {
+				trak.samples[i].size = trak.mdia.minf.stbl.stsz.entry_size[i]
+			} else
+			{
+				trak.samples[i].size = sample_size
+			}
+		}
+
+		// Calculate file offset for each sample
+		sample_id := 0
+		for i := 0; i < len(trak.chunks); i++ {
+			sample_offset := trak.chunks[i].offset
+			for j := 0; j < int(trak.chunks[i].sample_count); j++ {
+				sample_offset += trak.samples[sample_id].size
+				sample_id++
+			}
+		}
+
+		// Calculate decoding time for each sample
+		sample_id, sample_time := 0, uint32(0)
+		for i := 0; i < int(trak.mdia.minf.stbl.stts.entry_count); i++ {
+			sample_duration := trak.mdia.minf.stbl.stts.sample_delta[i]
+			for j := 0; j < int(trak.mdia.minf.stbl.stts.sample_count[i]); j++ {
+				trak.samples[sample_id].start_time = sample_time
+				trak.samples[sample_id].duration = sample_duration
+				sample_time += sample_duration
+				sample_id++
+			}
+		}
+		// Calculate decoding to composition time offset, if ctts table exists
+		if trak.mdia.minf.stbl.ctts != nil {
+			sample_id = 0
+			for i := 0; i < int(trak.mdia.minf.stbl.ctts.entry_count); i++ {
+				count := int(trak.mdia.minf.stbl.ctts.sample_count[i])
+				cto := trak.mdia.minf.stbl.ctts.sample_offset[i]
+				for j := 0; j < count; j++ {
+					trak.samples[sample_id].cto = cto
+					sample_id++
+				}
+			}
+		}
+	}
 	return nil
 }
 
@@ -241,6 +326,8 @@ type TrakBox struct {
 	tkhd *TkhdBox
 	mdia *MdiaBox
 	edts *EdtsBox
+	chunks []Chunk
+	samples []Sample
 }
 
 func (b *TrakBox) parse() (os.Error) {
@@ -808,13 +895,10 @@ func MakeFixed32(bytes []byte) (Fixed32, os.Error) {
 	return Fixed32(binary.BigEndian.Uint32(bytes)), nil
 }
 
-type ContainerBox interface {
-	ReadSubBoxes() (n int, err os.Error)
-	HandleSubBox() (*Box, func(*Box))
+type Chunk struct {
+	sample_description_index, start_sample, sample_count, offset uint32
 }
 
-type LeafBox interface {
-	ReadData() (n int, err os.Error)
-	ParseData() (n int, err os.Error)
-	ReadAndParseData() (n int, err os.Error)
+type Sample struct {
+	size, offset, start_time, duration, cto uint32
 }
