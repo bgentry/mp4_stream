@@ -190,8 +190,7 @@ func (f *File) ReadBoxAt(offset int64) (boxSize uint32, boxType string) {
 
 func (f *File) ReadBytesAt(n int64, offset int64) (word []byte) {
 	buf := make([]byte, n)
-	_, error := f.ReadAt(buf, offset)
-	if error != nil {
+	if _, error := f.ReadAt(buf, offset); error != nil {
 		fmt.Println(error)
 		return
 	}
