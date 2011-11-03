@@ -14,7 +14,7 @@ func Open(path string) (f *File, err os.Error) {
 	// fmt.Println(flag.Args())
 	fmt.Println(path)
 
-	file, err := os.Open(path, os.O_RDONLY, 0400)
+	file, err := os.OpenFile(path, os.O_RDONLY, 0400)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return nil, err
